@@ -13,5 +13,7 @@ public class OwnerDashboardStatsDto {
 
     private int totalStadiums;
     private int totalBookingsToday;
-    private double revenueThisWeek;
+    private double revenue;
+    private int appReservationsToday;
+    private int directReservationsToday;
 }

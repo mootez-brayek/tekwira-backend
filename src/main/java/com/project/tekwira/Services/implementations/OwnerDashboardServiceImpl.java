@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.List;
 
 @Service
 public class OwnerDashboardServiceImpl  implements OwnerDashboardService {
@@ -22,24 +23,46 @@ public class OwnerDashboardServiceImpl  implements OwnerDashboardService {
     }
 
     @Override
-    public OwnerDashboardStatsDto getStats(User owner) {
+    public OwnerDashboardStatsDto getStats(User owner, LocalDate startDate, LocalDate endDate) {
         int totalStadiums = stadiumRepository.countByOwner(owner);
 
         LocalDate today = LocalDate.now();
-        int totalBookingsToday = reservationRepository.findByStadiumOwnerAndDate(owner, today).size();
 
-        // Revenue this week
-        LocalDate startOfWeek = today.with(DayOfWeek.MONDAY);
-        LocalDate endOfWeek = startOfWeek.plusDays(6);
+        // Default to current week if start/end not provided
+        if (startDate == null) {
+            startDate = today.with(DayOfWeek.MONDAY);
+        }
+        if (endDate == null) {
+            endDate = startDate.plusDays(6);
+        }
 
-        double revenueThisWeek = reservationRepository.findByStadiumOwnerAndDateBetween(owner, startOfWeek, endOfWeek)
+        // Total bookings today (only for today, not affected by custom range)
+        List<Reservation> bookingsToday = reservationRepository.findByStadiumOwnerAndDate(owner, today);
+        int totalBookingsToday = bookingsToday.size();
+
+        // Count by reservation type
+        int appReservationsToday = (int) bookingsToday.stream()
+                .filter(r -> "APP".equalsIgnoreCase(String.valueOf(r.getReservationFrom())))
+                .count();
+
+        int directReservationsToday = (int) bookingsToday.stream()
+                .filter(r -> "DIRECT".equalsIgnoreCase(String.valueOf(r.getReservationFrom())))
+                .count();
+
+        // Revenue for the selected range
+        double revenue = reservationRepository.findByStadiumOwnerAndDateBetween(owner, startDate, endDate)
                 .stream()
                 .mapToDouble(this::calculateReservationRevenue)
                 .sum();
 
-        return new OwnerDashboardStatsDto(totalStadiums, totalBookingsToday, revenueThisWeek);
+        return new OwnerDashboardStatsDto(
+                totalStadiums,
+                totalBookingsToday,
+                revenue,
+                appReservationsToday,
+                directReservationsToday
+        );
     }
-
     private double calculateReservationRevenue(Reservation reservation) {
         int totalPlayers = reservation.getSlot().getStadium().getFieldType().getTotalPlayers();
         double pricePerPlayer;
