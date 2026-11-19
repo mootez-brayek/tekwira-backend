@@ -1,5 +1,6 @@
 package com.project.tekwira.Services.implementations;
 
+import com.project.tekwira.Dto.ProfileResponse;
 import com.project.tekwira.Dto.UpdatePlayerProfileRequest;
 import com.project.tekwira.Models.PlayerProfile;
 import com.project.tekwira.Models.User;
@@ -64,4 +65,33 @@ public class ProfileServiceImpl implements ProfileService {
         return profileRepository.save(profile);
     }
 
+    @Override
+    public ProfileResponse getMyProfile() {
+        User principalUser = JwtUtil.getCurrentUser();
+
+        User user = userRepository.findById(principalUser.getUserId())
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+        PlayerProfile profile = profileRepository.findByUser(user)
+            .orElseThrow(() -> new RuntimeException("Profile not found"));
+        return mapToDto(profile);
+    }
+
+    private ProfileResponse mapToDto(PlayerProfile profile) {
+        ProfileResponse dto = new ProfileResponse();
+
+        dto.setId(profile.getProfileId());
+        dto.setStrongFoot(profile.getStrongFoot());
+        dto.setPosition(profile.getPosition());
+        dto.setReservationCount(profile.getReservationCount());
+        dto.setBio(profile.getBio());
+        // from User entity
+        dto.setEmail(profile.getUser().getEmail());
+        dto.setUsername(profile.getUser().getUsername());
+        dto.setFirstName(profile.getUser().getFirstName());
+        dto.setLastName(profile.getUser().getLastName());
+        dto.setPhoneNumber(profile.getUser().getPhoneNumber());
+
+        return dto;
+    }
 }

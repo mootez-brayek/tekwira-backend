@@ -13,7 +13,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class CreateOWnerRequest {
+public class CreateOwnerRequest {
 
     @NotBlank(message = "Email is required")
     @Email

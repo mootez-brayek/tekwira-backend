@@ -1,9 +1,8 @@
 package com.project.tekwira.Repositories;
 
+import com.project.tekwira.Dto.RatingStats;
 import com.project.tekwira.Dto.StadiumResponse;
-import com.project.tekwira.Models.BookingType;
-import com.project.tekwira.Models.Stadium;
-import com.project.tekwira.Models.User;
+import com.project.tekwira.Models.*;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -19,16 +18,31 @@ public interface StadiumRepository extends JpaRepository<Stadium, Long> {
     @Query("""
         SELECT s FROM Stadium s
         LEFT JOIN Rating r ON r.stadium.id = s.id
+        WHERE s.isActive = true
+        AND (:name IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', :name, '%')))
+        AND (:address IS NULL OR LOWER(s.address) LIKE LOWER(CONCAT('%', :address, '%')))
+        AND (:fieldType IS NULL OR s.fieldType = :fieldType)
         GROUP BY s.id
-        ORDER BY AVG(r.score) DESC
-        """)
-    List<Stadium> findTopRatedStadiums();
+        ORDER BY COALESCE(AVG(r.score), 0) DESC
+    """)
+    List<Stadium> findTopRatedStadiums(
+        @Param("name") String name,
+        @Param("address") String address,
+        @Param("fieldType") FieldType fieldType
+    );
 
     @Query("""
-        SELECT s FROM Stadium s
-        WHERE s.isActive = true
-        """)
-    List<Stadium> getAllActiveStadiums();
+    SELECT s FROM Stadium s
+    WHERE s.isActive = true
+    AND (:name IS NULL OR LOWER(s.name) LIKE %:name%)
+    AND (:governorate IS NULL OR s.city = :governorate)
+    AND (:fieldType IS NULL OR s.fieldType = :fieldType)
+    """)
+    List<Stadium> getAllActiveStadiums(
+        @Param("name") String name,
+        @Param("governorate") Governorate governorate,
+        @Param("fieldType") FieldType fieldType
+    );
 
     @Query("SELECT COUNT(s) FROM Stadium s")
     long countAllStadiums();

@@ -1,5 +1,6 @@
 package com.project.tekwira.Services.implementations;
 
+import com.project.tekwira.Dto.ReservationResponse;
 import com.project.tekwira.Dto.StadiumSlotResponse;
 import com.project.tekwira.Models.*;
 import com.project.tekwira.Repositories.ReservationRepository;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -31,28 +33,62 @@ public class StadiumSlotImpl implements StadiumSlotService {
     @Override
     @Transactional
     public List<StadiumSlotResponse> createSlotsForStadium(Long stadiumId) {
+
         Stadium stadium = stadiumRepository.findById(stadiumId)
-                .orElseThrow(() -> new RuntimeException("Stadium not found"));
+            .orElseThrow(() -> new RuntimeException("Stadium not found"));
 
-        List<StadiumSlot> slots = new ArrayList<>();
-        var startTime = stadium.getOpeningTime();
-        var endTime = stadium.getClosingTime();
+        List<StadiumSlotResponse> responses = new ArrayList<>();
 
-        while (!startTime.isAfter(endTime.minusMinutes(90))) {
-            StadiumSlot slot = StadiumSlot.builder()
-                    .stadium(stadium)
-                    .startTime(startTime)
-                    .endTime(startTime.plusMinutes(90))
-                    .build();
-            slots.add(slot);
-            startTime = startTime.plusMinutes(90);
+        LocalTime opening = stadium.getOpeningTime();
+        LocalTime closing = stadium.getClosingTime();
+
+        int startMinutes = opening.getHour() * 60 + opening.getMinute();
+        int endMinutes = closing.getHour() * 60 + closing.getMinute();
+
+        // overnight case
+        if (endMinutes <= startMinutes) {
+            endMinutes += 24 * 60;
         }
-        List<StadiumSlot> saved = stadiumSlotRepository.saveAll(slots);
 
-        // For creation, reserved is always false
-        return saved.stream()
-                .map(slot -> new StadiumSlotResponse(slot.getId(), slot.getStartTime(), slot.getEndTime(), false, null, null))
-                .toList();
+        int slotDuration = 90;
+
+        for (int current = startMinutes; current + slotDuration <= endMinutes; current += slotDuration) {
+
+            int next = current + slotDuration;
+
+            LocalTime startTime = LocalTime.of(
+                (current / 60) % 24,
+                current % 60
+            );
+
+            LocalTime endTime = LocalTime.of(
+                (next / 60) % 24,
+                next % 60
+            );
+
+            StadiumSlot slot = StadiumSlot.builder()
+                .stadium(stadium)
+                .startTime(startTime)
+                .endTime(endTime)
+                .build();
+
+            StadiumSlot saved = stadiumSlotRepository.save(slot);
+
+            responses.add(new StadiumSlotResponse(
+                saved.getId(),
+                saved.getStartTime(),
+                saved.getEndTime(),
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+            ));
+        }
+
+        return responses;
     }
 
     // ====================
@@ -67,16 +103,19 @@ public class StadiumSlotImpl implements StadiumSlotService {
                     Optional<Reservation> reservationOpt = reservationRepository.findBySlot(slot);
 
                     boolean isReserved = reservationOpt.isPresent();
-                    String playerName = isReserved ? reservationOpt.get().getPlayer().getUsername() : null;
-                    BookingType reservationFrom = isReserved ? reservationOpt.get().getReservationFrom() : null;
+                    Reservation reservation = reservationOpt.orElse(null);
 
                     return new StadiumSlotResponse(
                             slot.getId(),
                             slot.getStartTime(),
                             slot.getEndTime(),
                             isReserved,
-                            playerName,
-                            reservationFrom
+                            isReserved ? reservation.getPlayer().getUsername() : null,
+                            isReserved ? reservation.getReservationFrom() : null,
+                            isReserved ? reservation.getId() : null,
+                            isReserved ? reservation.getReservationType() : null,
+                            isReserved ? reservation.getStatus() : null,
+                            isReserved ? reservation.getSubscriptionId() : null
                     );
                 })
                 .toList();
@@ -91,16 +130,19 @@ public class StadiumSlotImpl implements StadiumSlotService {
         Optional<Reservation> reservationOpt = reservationRepository.findBySlot(slot);
 
         boolean isReserved = reservationOpt.isPresent();
-        String playerName = isReserved ? reservationOpt.get().getPlayer().getUsername() : null;
-        BookingType reservationFrom = isReserved ? reservationOpt.get().getReservationFrom() : null;
+        Reservation reservation = reservationOpt.orElse(null);
 
         return new StadiumSlotResponse(
                 slot.getId(),
                 slot.getStartTime(),
                 slot.getEndTime(),
                 isReserved,
-                playerName,
-                reservationFrom
+                isReserved ? reservation.getPlayer().getUsername() : null,
+                isReserved ? reservation.getReservationFrom() : null,
+                isReserved ? reservation.getId() : null,
+                isReserved ? reservation.getReservationType() : null,
+                isReserved ? reservation.getStatus() : null,
+                isReserved ? reservation.getSubscriptionId() : null
         );
     }
 
@@ -126,7 +168,7 @@ public class StadiumSlotImpl implements StadiumSlotService {
     // ====================
     @Override
     @Transactional
-    public Reservation markSlotDirectBooked(Long stadiumId, Long slotId, LocalDate date) {
+    public ReservationResponse markSlotDirectBooked(Long stadiumId, Long slotId, LocalDate date) {
         User owner = JwtUtil.getCurrentUser();
 
         Stadium stadium = stadiumRepository.findById(stadiumId)
@@ -140,7 +182,11 @@ public class StadiumSlotImpl implements StadiumSlotService {
                 .orElseThrow(() -> new RuntimeException("Slot not found"));
 
         // Check if already booked
-        boolean exists = reservationRepository.existsBySlotAndDate(slot, date);
+        boolean exists = reservationRepository.existsBySlotAndDateAndStatus(
+            slot,
+            date,
+            ReservationStatus.BOOKED
+        );
         if (exists) {
             throw new RuntimeException("Slot is already booked for this date");
         }
@@ -153,27 +199,66 @@ public class StadiumSlotImpl implements StadiumSlotService {
         reservation.setStartTime(slot.getStartTime());
         reservation.setEndTime(slot.getEndTime());
         reservation.setReservationFrom(BookingType.DIRECT);
-        reservation.setStatus(ReservationStatus.CONFIRMED);
-
-        return reservationRepository.save(reservation);
+        reservation.setStatus(ReservationStatus.BOOKED);
+        reservation.setReservationType(ReservationType.ONE_GAME);
+        Reservation savedReservation = reservationRepository.save(reservation);
+        return mapToResponse(savedReservation);
     }
 
     // ====================
+
     private StadiumSlotResponse mapToResponse(StadiumSlot slot, LocalDate date) {
-        // Find the reservation for this slot and date (if exists)
-        Optional<Reservation> reservationOpt = reservationRepository.findBySlotAndDate(slot, date);
+
+        Optional<Reservation> reservationOpt =
+            reservationRepository.findBySlotAndDateAndStatus(
+                slot,
+                date,
+                ReservationStatus.BOOKED
+            );
 
         boolean isReserved = reservationOpt.isPresent();
-        String playerName = isReserved ? reservationOpt.get().getPlayer().getUsername() : null;
-        BookingType reservationFrom = isReserved ? reservationOpt.get().getReservationFrom() : null;
+
+        Reservation reservation = reservationOpt.orElse(null);
+
+        String playerName = isReserved
+            ? reservation.getPlayer().getUsername()
+            : null;
+
+        BookingType reservationFrom = isReserved
+            ? reservation.getReservationFrom()
+            : null;
 
         return new StadiumSlotResponse(
-                slot.getId(),
-                slot.getStartTime(),
-                slot.getEndTime(),
-                isReserved,
-                playerName,
-                reservationFrom
+            slot.getId(),
+            slot.getStartTime(),
+            slot.getEndTime(),
+            isReserved,
+            playerName,
+            reservationFrom,
+            isReserved ? reservation.getId() : null,
+            isReserved ? reservation.getReservationType() : null,
+            isReserved ? reservation.getStatus() : null,
+            isReserved ? reservation.getSubscriptionId() : null
+        );
+    }
+
+
+
+    private ReservationResponse mapToResponse(Reservation r) {
+        return new ReservationResponse(
+            r.getId(),
+            r.getStadium().getId(),
+            r.getDate(),
+            r.getStadium().getName(),
+            r.getPlayer().getUsername(),
+            r.getStartTime(),
+            r.getEndTime(),
+            r.getStadium().getFieldType(),
+            r.getSlot().getId(),
+            r.getReservationFrom(),
+            r.getReservationType(),
+            r.getStatus(),
+            r.getSubscriptionId()
         );
     }
 }

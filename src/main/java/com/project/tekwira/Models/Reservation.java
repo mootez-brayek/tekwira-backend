@@ -29,6 +29,7 @@ public class Reservation {
     private LocalTime endTime;
 
     private BookingType reservationFrom;
+    private ReservationType reservationType;
     private String subscriptionId;
     // 🔗 Relations
     @ManyToOne

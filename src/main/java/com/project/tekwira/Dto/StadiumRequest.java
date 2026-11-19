@@ -1,6 +1,7 @@
 package com.project.tekwira.Dto;
 
 import com.project.tekwira.Models.FieldType;
+import com.project.tekwira.Models.Governorate;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -22,6 +23,9 @@ public class StadiumRequest {
     @NotBlank(message = "Address is required")
     private String address;
 
+    @NotNull(message = "Governorate is required")
+    private Governorate governorate;
+
     private Double latitude;
     private Double longitude;
 
@@ -39,6 +43,6 @@ public class StadiumRequest {
     private Double subscriptionPrice;
 
     private String description;
-    private List<MultipartFile> imageUrls;
+    private List<MultipartFile> imageFiles;
     private MultipartFile logo;
 }

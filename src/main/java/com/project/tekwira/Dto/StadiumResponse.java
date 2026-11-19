@@ -1,6 +1,7 @@
 package com.project.tekwira.Dto;
 
 import com.project.tekwira.Models.FieldType;
+import com.project.tekwira.Models.Governorate;
 import com.project.tekwira.Models.User;
 import jakarta.persistence.Column;
 import lombok.AllArgsConstructor;
@@ -23,6 +24,7 @@ public class StadiumResponse {
     private String name;
     private String description;
     private String address;
+    private Governorate governorate;
     private Double latitude;
     private Double longitude;
     private FieldType fieldType;
@@ -34,5 +36,5 @@ public class StadiumResponse {
     private Long ratingsCount;
     private User owner;
     private Boolean isActive;
-
+    private boolean userHasRated;
 }

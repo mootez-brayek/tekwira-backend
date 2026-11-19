@@ -4,6 +4,7 @@ import com.project.tekwira.Dto.RatingStats;
 import com.project.tekwira.Dto.StadiumFilterDto;
 import com.project.tekwira.Dto.StadiumRequest;
 import com.project.tekwira.Dto.StadiumResponse;
+import com.project.tekwira.Models.FieldType;
 import com.project.tekwira.Models.Stadium;
 import com.project.tekwira.Models.User;
 import com.project.tekwira.Repositories.RatingRepository;
@@ -33,10 +34,13 @@ public class StadiumServiceImpl implements StadiumService {
     private final RatingRepository ratingRepository;
     private final FileStorageService fileStorageService;
 
+    @Transactional
     @Override
     public StadiumResponse createStadium(StadiumRequest request) throws IOException {
         User owner = JwtUtil.getCurrentUser();
-        List<String> urls = fileStorageService.storeFiles(request.getImageUrls());
+        List<String> urls = request.getImageFiles() != null
+            ? fileStorageService.storeFiles(request.getImageFiles())
+            : new ArrayList<>();
 
         String logoUrl = request.getLogo() != null ? fileStorageService.storeFile(request.getLogo()) : null;
 
@@ -47,6 +51,7 @@ public class StadiumServiceImpl implements StadiumService {
         Stadium.StadiumBuilder builder = Stadium.builder()
                 .name(request.getName())
                 .address(request.getAddress())
+                .city(request.getGovernorate())
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .openingTime(request.getOpeningTime())
@@ -72,8 +77,9 @@ public class StadiumServiceImpl implements StadiumService {
 
     @Override
     @Transactional
-    public StadiumResponse updateStadium(Long stadiumId, StadiumRequest request) {
+    public StadiumResponse updateStadium(Long stadiumId, StadiumRequest request) throws IOException{
         User owner = JwtUtil.getCurrentUser();
+
         Stadium stadium = stadiumRepository.findById(stadiumId)
                 .orElseThrow(() -> new RuntimeException("Stadium not found"));
 
@@ -92,7 +98,10 @@ public class StadiumServiceImpl implements StadiumService {
         if (request.getClosingTime() != null) stadium.setClosingTime(request.getClosingTime());
         if (request.getPricePerGame() != null) stadium.setPricePerGame(request.getPricePerGame());
         if (request.getDescription() != null) stadium.setDescription(request.getDescription());
-
+        if (request.getImageFiles() != null && !request.getImageFiles().isEmpty()) {
+            List<String> urls = fileStorageService.storeFiles(request.getImageFiles());
+            stadium.setImageUrls(urls);
+        }
         Stadium updateStadium = stadiumRepository.save(stadium);
         return mapToResponse(updateStadium);
     }
@@ -115,7 +124,7 @@ public class StadiumServiceImpl implements StadiumService {
     public List<StadiumResponse> listAllStadiums(StadiumFilterDto filter) {
         return stadiumRepository.findAll()
                 .stream()
-                .filter(s -> filter.getAddress() == null || filter.getName().isBlank() || s.getAddress().equalsIgnoreCase(filter.getAddress()))
+                .filter(s -> filter.getGovernorate() == null || filter.getName().isBlank())
                 .filter(s -> (filter.getName() == null || filter.getName().isBlank() ||
                                 s.getName().toLowerCase().contains(filter.getName().toLowerCase())))
                 .map(this::mapToResponse)
@@ -126,7 +135,7 @@ public class StadiumServiceImpl implements StadiumService {
     public List<StadiumResponse> listStadiumsByOwner(User owner, StadiumFilterDto filter) {
         return stadiumRepository.findByOwner(owner)
                 .stream()
-                .filter(s -> filter.getAddress() == null || filter.getName().isBlank() || s.getAddress().equalsIgnoreCase(filter.getAddress()))
+                .filter(s -> filter.getGovernorate() == null || filter.getName().isBlank())
                 .filter(s -> (filter.getName() == null || filter.getName().isBlank() ||
                         s.getName().toLowerCase().contains(filter.getName().toLowerCase())))
                 .map(this::mapToResponse)
@@ -137,7 +146,8 @@ public class StadiumServiceImpl implements StadiumService {
     public StadiumResponse getStadiumById(Long stadiumId) {
         Stadium stadium = stadiumRepository.findById(stadiumId)
                 .orElseThrow(() -> new RuntimeException("Stadium not found"));
-        return mapToResponse(stadium);
+        User player = JwtUtil.getCurrentUser();
+        return mapToResponse(stadium, player);
     }
 
 
@@ -150,50 +160,82 @@ public class StadiumServiceImpl implements StadiumService {
         stadiumRepository.save(stadium);
     }
 
-
     @Override
     public List<StadiumResponse> getTopRatedStadiums(StadiumFilterDto filter) {
-        return stadiumRepository.findTopRatedStadiums()
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+
+        List<Stadium> stadiums = stadiumRepository.findTopRatedStadiums(
+            filter.getName(),
+            null,
+            filter.getFieldType()
+        );
+        return stadiums.stream()
+            .map(this::mapToResponse)
+            .toList();
     }
 
     @Override
     public List<StadiumResponse> getAllActiveStadiums(StadiumFilterDto filter) {
-        return stadiumRepository.getAllActiveStadiums()
-                .stream()
-                .filter(s -> filter.getAddress() == null || filter.getName().isBlank() || s.getAddress().equalsIgnoreCase(filter.getAddress()))
-                .filter(s -> (filter.getName() == null || filter.getName().isBlank() ||
-                        s.getName().toLowerCase().contains(filter.getName().toLowerCase())))
-                .map(this::mapToResponse).toList();
-    }
 
-    public StadiumResponse mapToResponse(Stadium stadium) {
+        User player = JwtUtil.getCurrentUser();
+
+        String name = (filter.getName() == null || filter.getName().isBlank())
+            ? null
+            : filter.getName().trim().toLowerCase();
+
+        List<Stadium> stadiums = stadiumRepository.getAllActiveStadiums(
+            name,
+            filter.getGovernorate(),
+            filter.getFieldType()
+        );
+
+        return stadiums.stream()
+            .map(stadium -> mapToResponse(stadium, player))
+            .toList();
+    }
+    public StadiumResponse mapToResponse(Stadium stadium, User player) {
 
         RatingStats stats = ratingRepository.getRatingStatsForStadium(stadium.getId());
 
-        double avg = stats != null && stats.getAvgRating() != null ? stats.getAvgRating() : 0.0;
-        long count = stats != null ? stats.getRatingsCount() : 0;
+        double avg = stats != null && stats.getAvgRating() != null
+            ? stats.getAvgRating()
+            : 0.0;
 
-        return new StadiumResponse(
-                stadium.getId(),
-                stadium.getImageUrls(),
-                stadium.getLogo(),
-                stadium.getName(),
-                stadium.getDescription(),
-                stadium.getAddress(),
-                stadium.getLatitude(),
-                stadium.getLongitude(),
-                stadium.getFieldType(),
-                stadium.getOpeningTime(),
-                stadium.getClosingTime(),
-                stadium.getPricePerGame(),
-                stadium.getSubscriptionPrice(),
-                avg,
-                count,
-                stadium.getOwner(),
-                stadium.isActive()
-        );
+        long count = stats != null
+            ? stats.getRatingsCount()
+            : 0;
+
+        boolean userHasRated = false;
+
+        if (player != null) {
+            userHasRated = ratingRepository.existsByPlayerAndStadium(player, stadium);
+        }
+
+        StadiumResponse response = new StadiumResponse();
+
+        response.setId(stadium.getId());
+        response.setImageUrls(stadium.getImageUrls());
+        response.setLogo(stadium.getLogo());
+        response.setName(stadium.getName());
+        response.setDescription(stadium.getDescription());
+        response.setAddress(stadium.getAddress());
+        response.setGovernorate(stadium.getCity());
+        response.setLatitude(stadium.getLatitude());
+        response.setLongitude(stadium.getLongitude());
+        response.setFieldType(stadium.getFieldType());
+        response.setOpeningTime(stadium.getOpeningTime());
+        response.setClosingTime(stadium.getClosingTime());
+        response.setPricePerGame(stadium.getPricePerGame());
+        response.setSubscriptionPrice(stadium.getSubscriptionPrice());
+        response.setAverageRating(avg);
+        response.setRatingsCount(count);
+        response.setOwner(stadium.getOwner());
+        response.setIsActive(stadium.isActive());
+        response.setUserHasRated(userHasRated);
+
+        return response;
+    }
+
+    private StadiumResponse mapToResponse(Stadium stadium) {
+        return mapToResponse(stadium, null);
     }
 }

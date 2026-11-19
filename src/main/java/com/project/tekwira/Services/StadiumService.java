@@ -14,7 +14,7 @@ public interface StadiumService {
     StadiumResponse createStadium(StadiumRequest request) throws IOException;
 
     // 🏟 Owner updates their stadium
-    StadiumResponse updateStadium(Long stadiumId, StadiumRequest request);
+    StadiumResponse updateStadium(Long stadiumId, StadiumRequest request)throws IOException;
 
     // 🏟 Owner deletes their stadium
     void deleteStadium(Long stadiumId);

@@ -1,6 +1,7 @@
 package com.project.tekwira.Services.implementations;
 
 import com.project.tekwira.Dto.RatingRequest;
+import com.project.tekwira.Dto.RatingResponse;
 import com.project.tekwira.Models.Rating;
 import com.project.tekwira.Models.Stadium;
 import com.project.tekwira.Models.User;
@@ -11,6 +12,7 @@ import com.project.tekwira.Services.RatingService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -26,7 +28,7 @@ public class RatingServiceImpl implements RatingService {
 
     @Override
     @Transactional
-    public Rating rateStadium(RatingRequest request) {
+    public RatingResponse rateStadium(RatingRequest request) {
         User player = JwtUtil.getCurrentUser();
         Stadium stadium = stadiumRepository.findById(request.getStadiumId())
                 .orElseThrow(() -> new RuntimeException("Stadium not found"));
@@ -43,7 +45,22 @@ public class RatingServiceImpl implements RatingService {
             rating.setScore(request.getScore());
             rating.setComment(request.getComment());
             rating.setPlayer(player);
+            rating.setCreatedAt(LocalDateTime.now());
         }
-        return ratingRepository.save(rating);
+        Rating saved = ratingRepository.save(rating);
+
+        // ✅ RETURN DTO INSTEAD
+        return mapToResponse(saved);
+    }
+
+    private RatingResponse mapToResponse(Rating rating) {
+        return RatingResponse.builder()
+            .id(rating.getId())
+            .stadiumName(rating.getStadium().getName())
+            .playerUsername(rating.getPlayer().getUsername())
+            .score(rating.getScore())
+            .comment(rating.getComment())
+            .date(rating.getCreatedAt().toLocalDate())
+            .build();
     }
 }

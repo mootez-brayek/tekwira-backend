@@ -1,5 +1,6 @@
 package com.project.tekwira.Services;
 
+import com.project.tekwira.Dto.ReservationResponse;
 import com.project.tekwira.Dto.StadiumSlotResponse;
 import com.project.tekwira.Models.Reservation;
 import com.project.tekwira.Models.StadiumSlot;
@@ -25,5 +26,5 @@ public interface StadiumSlotService {
     List<StadiumSlotResponse> getSlotsForDate(Long stadiumId, LocalDate date);
 
     // Admin marks a slot as directly booked for a specific date
-    Reservation markSlotDirectBooked(Long stadiumId, Long slotId, LocalDate date);
+    ReservationResponse markSlotDirectBooked(Long stadiumId, Long slotId, LocalDate date);
 }

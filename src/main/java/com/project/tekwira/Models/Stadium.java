@@ -26,6 +26,9 @@ public class Stadium {
     @Column(nullable = false)
     private String name;
 
+    @Enumerated(EnumType.STRING)
+    private Governorate city;
+
     @Column(nullable = false)
     private String address;
 

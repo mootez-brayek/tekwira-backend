@@ -1,7 +1,9 @@
 package com.project.tekwira.Services.implementations;
 
 import com.project.tekwira.Dto.OwnerDashboardStatsDto;
+import com.project.tekwira.Models.BookingType;
 import com.project.tekwira.Models.Reservation;
+import com.project.tekwira.Models.ReservationType;
 import com.project.tekwira.Models.User;
 import com.project.tekwira.Repositories.ReservationRepository;
 import com.project.tekwira.Repositories.StadiumRepository;
@@ -10,69 +12,138 @@ import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.util.List;
+import java.util.*;
 
 @Service
 public class OwnerDashboardServiceImpl  implements OwnerDashboardService {
     private final StadiumRepository stadiumRepository;
     private final ReservationRepository reservationRepository;
+    private final RevenueCalculator revenueCalculator;
 
-    public OwnerDashboardServiceImpl(StadiumRepository stadiumRepository, ReservationRepository reservationRepository) {
+    public OwnerDashboardServiceImpl(StadiumRepository stadiumRepository, ReservationRepository reservationRepository, RevenueCalculator revenueCalculator) {
         this.stadiumRepository = stadiumRepository;
         this.reservationRepository = reservationRepository;
+        this.revenueCalculator = revenueCalculator;
     }
 
     @Override
-    public OwnerDashboardStatsDto getStats(User owner, LocalDate startDate, LocalDate endDate) {
-        int totalStadiums = stadiumRepository.countByOwner(owner);
+    public OwnerDashboardStatsDto getStats(
+        User owner,
+        LocalDate startDate,
+        LocalDate endDate
+    ) {
 
-        LocalDate today = LocalDate.now();
-
-        // Default to current week if start/end not provided
         if (startDate == null) {
-            startDate = today.with(DayOfWeek.MONDAY);
+            startDate = LocalDate.now().with(DayOfWeek.MONDAY);
         }
+
         if (endDate == null) {
             endDate = startDate.plusDays(6);
         }
 
-        // Total bookings today (only for today, not affected by custom range)
-        List<Reservation> bookingsToday = reservationRepository.findByStadiumOwnerAndDate(owner, today);
-        int totalBookingsToday = bookingsToday.size();
+        List<Reservation> reservations =
+            reservationRepository.findByStadiumOwnerAndDateBetween(
+                owner,
+                startDate,
+                endDate
+            );
 
-        // Count by reservation type
-        int appReservationsToday = (int) bookingsToday.stream()
-                .filter(r -> "APP".equalsIgnoreCase(String.valueOf(r.getReservationFrom())))
-                .count();
+        // =========================
+        // FIND FIRST SUBSCRIPTION DATE (GLOBAL PER OWNER CONTEXT)
+        // =========================
+        Map<String, LocalDate> subscriptionFirstDate = new HashMap<>();
 
-        int directReservationsToday = (int) bookingsToday.stream()
-                .filter(r -> "DIRECT".equalsIgnoreCase(String.valueOf(r.getReservationFrom())))
-                .count();
+        for (Reservation r : reservationRepository.findAllByOwner(owner.getUserId())) {
 
-        // Revenue for the selected range
-        double revenue = reservationRepository.findByStadiumOwnerAndDateBetween(owner, startDate, endDate)
-                .stream()
-                .mapToDouble(this::calculateReservationRevenue)
-                .sum();
+            if (r.getReservationType() == ReservationType.SUBSCRIPTION
+                && r.getSubscriptionId() != null) {
 
-        return new OwnerDashboardStatsDto(
-                totalStadiums,
-                totalBookingsToday,
-                revenue,
-                appReservationsToday,
-                directReservationsToday
-        );
-    }
-    private double calculateReservationRevenue(Reservation reservation) {
-        int totalPlayers = reservation.getSlot().getStadium().getFieldType().getTotalPlayers();
-        double pricePerPlayer;
-
-        if (reservation.getSubscriptionId() != null && !reservation.getSubscriptionId().isEmpty()) {
-            pricePerPlayer = reservation.getStadium().getSubscriptionPrice();
-        } else {
-            pricePerPlayer = reservation.getStadium().getPricePerGame();
+                subscriptionFirstDate.merge(
+                    r.getSubscriptionId(),
+                    r.getDate(),
+                    (oldDate, newDate) ->
+                        oldDate.isBefore(newDate) ? oldDate : newDate
+                );
+            }
         }
 
-        return pricePerPlayer * totalPlayers;
+        Set<String> countedSubscriptions = new HashSet<>();
+
+        int totalBookings = 0;
+        int appReservations = 0;
+        int directReservations = 0;
+        double revenue = 0;
+
+        for (Reservation r : reservations) {
+
+            // =========================
+            // ONE GAME → always counted normally
+            // =========================
+            if (r.getReservationType() == ReservationType.ONE_GAME) {
+
+                revenue += revenueCalculator.calculateReservationRevenue(
+                    r,
+                    countedSubscriptions
+                );
+
+                totalBookings++;
+
+                if (r.getReservationFrom() == BookingType.APP) {
+                    appReservations++;
+                }
+
+                if (r.getReservationFrom() == BookingType.DIRECT) {
+                    directReservations++;
+                }
+            }
+
+            // =========================
+            // SUBSCRIPTION → ONLY IF FIRST DATE IN RANGE
+            // =========================
+            else if (r.getReservationType() == ReservationType.SUBSCRIPTION) {
+
+                String subId = r.getSubscriptionId();
+                if (subId == null) continue;
+
+                LocalDate firstDate = subscriptionFirstDate.get(subId);
+
+                boolean isInRange =
+                    firstDate != null &&
+                        !firstDate.isBefore(startDate) &&
+                        !firstDate.isAfter(endDate);
+
+                boolean notAlreadyCounted =
+                    !countedSubscriptions.contains(subId);
+
+                if (isInRange && notAlreadyCounted) {
+
+                    // 🚨 IMPORTANT: only add revenue ONCE per subscription
+                    revenue += r.getStadium().getSubscriptionPrice()
+                        * r.getStadium().getFieldType().getTotalPlayers();
+
+                    countedSubscriptions.add(subId);
+
+                    totalBookings++;
+
+                    if (r.getReservationFrom() == BookingType.APP) {
+                        appReservations++;
+                    }
+
+                    if (r.getReservationFrom() == BookingType.DIRECT) {
+                        directReservations++;
+                    }
+                }
+            }
+        }
+
+        int totalStadiums = stadiumRepository.countByOwner(owner);
+
+        return new OwnerDashboardStatsDto(
+            totalStadiums,
+            totalBookings,
+            revenue,
+            appReservations,
+            directReservations
+        );
     }
 }

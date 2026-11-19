@@ -74,7 +74,8 @@ public class ApplicationSecurity {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/**",
-                                "/uploads/**"
+                                "/uploads/**",
+                                "/api/user/**"
                         ).permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())

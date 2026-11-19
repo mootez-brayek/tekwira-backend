@@ -1,5 +1,6 @@
 package com.project.tekwira.Controllers;
 
+import com.project.tekwira.Dto.ReservationResponse;
 import com.project.tekwira.Dto.StadiumSlotResponse;
 import com.project.tekwira.Models.Reservation;
 import com.project.tekwira.Models.StadiumSlot;
@@ -36,12 +37,12 @@ public class StadiumSlotController {
     // 🏟 OWNER: Directly book a slot for a date
     @PostMapping("/stadium/{stadiumId}/slot/{slotId}/book")
     @PreAuthorize("hasRole('OWNER')")
-    public ResponseEntity<Reservation> markSlotDirectBooked(
+    public ResponseEntity<ReservationResponse> markSlotDirectBooked(
             @PathVariable Long stadiumId,
             @PathVariable Long slotId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
-        Reservation reservation = stadiumSlotService.markSlotDirectBooked(stadiumId, slotId, date);
+        ReservationResponse reservation = stadiumSlotService.markSlotDirectBooked(stadiumId, slotId, date);
         return ResponseEntity.status(HttpStatus.CREATED).body(reservation);
     }
 

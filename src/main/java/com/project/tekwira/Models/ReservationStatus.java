@@ -1,8 +1,8 @@
 package com.project.tekwira.Models;
 
 public enum ReservationStatus {
-    PENDING,
-    CONFIRMED,
-    CANCELED,
-    REJECTED
+    BOOKED,
+    COMPLETED,
+    CANCELLED,
+    NO_SHOW
 }

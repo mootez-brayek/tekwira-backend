@@ -1,6 +1,7 @@
 package com.project.tekwira.Services;
 
 import com.project.tekwira.Dto.ReservationRequest;
+import com.project.tekwira.Dto.ReservationResponse;
 import com.project.tekwira.Models.Reservation;
 import com.project.tekwira.Models.StadiumSlot;
 
@@ -9,17 +10,25 @@ import java.util.List;
 
 public interface ReservationService {
 
-    List<Reservation> createReservation(ReservationRequest request);
+    List<ReservationResponse> createReservation(ReservationRequest request);
 
     // Cancel a reservation by slot and date
-    void cancelReservation(Long slotId, LocalDate date);
+    ReservationResponse cancelReservation(Long reservationId);
 
     // List all reservations for the current player
-    List<Reservation> listReservationsForPlayer();
+    List<ReservationResponse> listReservationsForPlayer();
 
     // List all reservations for a stadium (admin)
-    List<Reservation> listReservationsForStadium(Long stadiumId);
+    List<ReservationResponse> listReservationsForStadium(Long stadiumId);
 
     // Get a reservation by its ID
-    Reservation getReservationById(Long reservationId);
+    ReservationResponse getReservationById(Long reservationId);
+
+    List<ReservationResponse> getReservationsByDateRange(LocalDate start, LocalDate end);
+
+    List<ReservationResponse> myUpcomingReservation();
+
+    ReservationResponse completeReservation(Long reservationId);
+
+    ReservationResponse ownerCancelReservation(Long reservationId);
 }

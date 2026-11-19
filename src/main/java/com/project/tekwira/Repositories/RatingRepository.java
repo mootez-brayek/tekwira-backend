@@ -34,4 +34,24 @@ public interface RatingRepository extends JpaRepository<Rating, Long> {
     GROUP BY r.stadium.id
 """)
     RatingStats getRatingStatsForStadium(@Param("stadiumId") Long stadiumId);
+
+    @Query("""
+        SELECT AVG(r.score)
+        FROM Rating r
+        WHERE r.stadium.id = :stadiumId
+    """)
+    Double getAverageScoreByStadium(@Param("stadiumId") Long stadiumId);
+
+
+    @Query("""
+    SELECT r.stadium.id,
+           COALESCE(AVG(r.score), 0),
+           COUNT(r)
+    FROM Rating r
+    WHERE r.stadium.id IN :ids
+    GROUP BY r.stadium.id
+""")
+    List<Object[]> getStatsForStadiums(@Param("ids") List<Long> ids);
+
+    boolean existsByPlayerAndStadium(User player, Stadium stadium);
 }

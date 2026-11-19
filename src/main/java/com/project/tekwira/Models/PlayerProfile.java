@@ -32,6 +32,18 @@ public class PlayerProfile {
 
     private String bio;
 
+    @Column(nullable = false)
+    private int reliabilityScore = 50;
+
+    @Column(nullable = false)
+    private int completedReservations = 0;
+
+    @Column(nullable = false)
+    private int cancelledReservations = 0;
+
+    @Column(nullable = false)
+    private int noShowReservations = 0;
+
     @OneToOne
     @JoinColumn(name = "userId", nullable = false)
     private User user;

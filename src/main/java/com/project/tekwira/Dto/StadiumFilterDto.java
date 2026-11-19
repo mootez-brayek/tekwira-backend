@@ -1,5 +1,7 @@
 package com.project.tekwira.Dto;
 
+import com.project.tekwira.Models.FieldType;
+import com.project.tekwira.Models.Governorate;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -7,5 +9,6 @@ import lombok.Setter;
 @Setter
 public class StadiumFilterDto {
     private String name;
-    private String address;
+    private Governorate governorate;
+    private FieldType fieldType;
 }

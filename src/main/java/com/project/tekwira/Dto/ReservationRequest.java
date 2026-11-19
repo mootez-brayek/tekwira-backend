@@ -26,7 +26,7 @@ public class ReservationRequest {
     private LocalDate date;
 
     // Optional: initial status for admin override (default can be PENDING)
-    private ReservationStatus status = ReservationStatus.PENDING;
+    private ReservationStatus status = ReservationStatus.BOOKED;
 
     private ReservationType type;
 }
